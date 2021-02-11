@@ -1,11 +1,11 @@
 import os
 
-from flask import Flask, render_template, request, flash, redirect, session, g
+from flask import Flask, render_template, request, flash, redirect, session, g, jsonify
 from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -213,8 +213,27 @@ def stop_following(follow_id):
 @app.route('/users/profile', methods=["GET", "POST"])
 def profile():
     """Update profile for current user."""
+    form = UserAddForm(obj=g.user)
 
-    # IMPLEMENT THIS
+    if form.validate_on_submit():
+        # Must be signed in
+        user = User.authenticate(form.username.data, form.password.data)
+
+        if user:
+            g.user.username = form.username.data
+            g.user.email = form.email.data
+            g.user.image_url = form.image_url.data 
+            g.user.header_image_url = form.header_image_url.data 
+            g.user.location = form.location.data 
+            g.user.bio = form.bio.data 
+
+            db.session.commit()
+            return redirect(f'/users/{g.user.id}')
+        
+        flash("Invalid Password", "danger")
+        return redirect('/')
+
+    return render_template('users/login.html', form=form)
 
 
 @app.route('/users/delete', methods=["POST"])
@@ -295,8 +314,10 @@ def homepage():
     """
 
     if g.user:
+        following = [user.id for user in g.user.following]
         messages = (Message
                     .query
+                    .filter(Message.user_id.in_(following))
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
@@ -305,6 +326,37 @@ def homepage():
 
     else:
         return render_template('home-anon.html')
+
+
+##############################################################################
+# Likes
+
+@app.route('/users/add_like/<int:message_id>', methods=["POST", "DELETE"])
+def like_unlike_post(message_id):
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    message = Message.query.get(message_id)
+    if message not in g.user.likes:
+        like = Likes(user_id=message.user_id, message_id=message_id)
+        g.user.likes.append(message)
+        db.session.commit()
+        serialized = like.serialize()
+        like = Likes.query.filter(Likes.message_id == message_id).first()
+        return jsonify(like=serialized), 201
+    else:
+        like = Likes.query.filter(Likes.message_id == message_id).first()
+        db.session.delete(like)
+        db.session.commit()
+        return jsonify(message="Deleted")
+    return render_template('home.html')
+
+@app.route('/messages/liked')
+def liked_posts():
+    """Will diplay only liked messages of the users the authorized user follows"""
+    return render_template('home.html',messages=g.user.likes)
+
 
 
 ##############################################################################

@@ -1,0 +1,21 @@
+> 
+Step Seven: Research and Understand Login Strategy
+
+Look over the code in app.py related to authentication.
+
+    How is the logged in user being kept track of?
+    What is Flask’s g object?
+    What is the purpose of add_user_to_g?
+    What does @app.before_request mean?
+
+1. The logged in user is being kept track of by 'session[CURR_USER_KEY] = user.id'
+
+2. Flask's g object is a global object. Makes it accessible to other objects.
+
+3. The purpose of 'add_user_to_g' is to add the user from the session to a global object.
+
+4. '@app.before_request' is a decorator that will run the 'add_user_to_g' function before every request.
+before_request functions are ideal for tasks such as:
+    * Opening database connections
+    * Loading a user from the session
+    * Working with the flask g object
